@@ -5,11 +5,11 @@ from datetime import datetime, timezone
 
 from core import (
     grade_prop, record, hit_rate, hit_text, split_table,
-    defense_vs_position, line_explorer, consistency_metrics, research_summary,
+    defense_vs_position, line_explorer, consistency_metrics,
 )
 
 st.set_page_config(
-    page_title="NFL Prop Lab — Candidate v0.9 Beta",
+    page_title="NFL Prop Lab — Candidate v0.9.1 Beta Hotfix",
     page_icon="🏈",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -123,9 +123,54 @@ def custom_line_explorer(df, stat, main_line, side, market):
         })
     return pd.DataFrame(rows)
 
+
+def research_summary(frame, stat, line, side, last5=None):
+    """Neutral descriptive summary for the selected historical sample."""
+    if frame.empty:
+        return []
+
+    vals = pd.to_numeric(frame[stat], errors="coerce").dropna()
+    if vals.empty:
+        return []
+
+    wins = int(frame["grade"].eq("Win").sum())
+    losses = int(frame["grade"].eq("Loss").sum())
+    pushes = int(frame["grade"].eq("Push").sum())
+    games = len(frame)
+    median = float(vals.median())
+    average = float(vals.mean())
+
+    if median > line:
+        median_relation = "above"
+    elif median < line:
+        median_relation = "below"
+    else:
+        median_relation = "equal to"
+
+    sentences = [
+        f"{wins} wins in {games} games at this line ({hit_rate(frame):.0f}% graded hit rate; {wins}-{losses}-{pushes} W-L-P).",
+        f"Sample average: {average:.1f}; median: {median:.1f}, {median_relation} the {line:g} line.",
+    ]
+
+    if last5 is not None and not last5.empty:
+        recent = hit_rate(last5)
+        overall = hit_rate(frame)
+        diff = recent - overall
+        if abs(diff) < 10:
+            trend = "similar to"
+        elif diff > 0:
+            trend = "higher than"
+        else:
+            trend = "lower than"
+        sentences.append(
+            f"Last-5 graded hit rate is {recent:.0f}%, {trend} the selected sample's {overall:.0f}%."
+        )
+
+    return sentences
+
 # ---------- DATA ----------
 st.title("🏈 NFL Prop Lab")
-st.caption("Candidate v0.9 Beta · historical prop research, not a betting recommendation")
+st.caption("Candidate v0.9.1 Beta Hotfix · historical prop research, not a betting recommendation")
 
 try:
     with st.spinner("Loading NFL data…"):
