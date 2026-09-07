@@ -5,11 +5,11 @@ from datetime import datetime, timezone
 
 from core import (
     grade_prop, record, hit_rate, hit_text, split_table,
-    defense_vs_position, line_explorer, consistency_metrics,
+    defense_vs_position, line_explorer, consistency_metrics, research_summary,
 )
 
 st.set_page_config(
-    page_title="NFL Prop Lab — Candidate v0.8",
+    page_title="NFL Prop Lab — Candidate v0.9 Beta",
     page_icon="🏈",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -125,7 +125,7 @@ def custom_line_explorer(df, stat, main_line, side, market):
 
 # ---------- DATA ----------
 st.title("🏈 NFL Prop Lab")
-st.caption("Candidate v0.8 · historical prop research, not a betting recommendation")
+st.caption("Candidate v0.9 Beta · historical prop research, not a betting recommendation")
 
 try:
     with st.spinner("Loading NFL data…"):
@@ -248,6 +248,30 @@ with tab1:
     d.metric("Median", f"{primary[stat].median():.1f}")
     st.caption(
         f"{scope}: {record(primary)} W-L-P · Last 5: {record(last5)} · Last 10: {record(last10)}"
+    )
+
+    st.markdown("#### Research summary")
+    summary_lines = research_summary(primary, stat, line, side, last5=last5)
+    for sentence in summary_lines:
+        st.markdown(f"- {sentence}")
+
+    if matchup_defense != "Not selected":
+        summary_ctx = defense_vs_position(data, player_latest_season, player_pos, stat)
+        if not summary_ctx.empty and matchup_defense in set(summary_ctx["opponent_team"]):
+            summary_row = summary_ctx.loc[summary_ctx["opponent_team"].eq(matchup_defense)].iloc[0]
+            summary_total = len(summary_ctx)
+            summary_rank = int(summary_row["Most_allowed_rank"])
+            summary_league = float(summary_ctx["Allowed_per_game"].mean())
+            summary_allowed = float(summary_row["Allowed_per_game"])
+            relation = "above" if summary_allowed > summary_league else "below" if summary_allowed < summary_league else "at"
+            st.markdown(
+                f"- **Matchup context:** {matchup_defense} ranks {summary_rank}/{summary_total} "
+                f"for most {market.lower()} allowed to {player_pos}s per game "
+                f"({summary_allowed:.1f}, {relation} the {summary_league:.1f} league average)."
+            )
+
+    st.caption(
+        "Descriptive historical context only. It does not estimate win probability, expected value, or recommend a wager."
     )
 
     if len(primary) < 5:

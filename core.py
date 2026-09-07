@@ -71,3 +71,48 @@ def consistency_metrics(df, stat):
     if s.empty:
         return {}
     return {"P25":float(s.quantile(.25)),"P50":float(s.quantile(.50)),"P75":float(s.quantile(.75)),"Min":float(s.min()),"Max":float(s.max()),"Std":float(s.std(ddof=0)) if len(s)>1 else 0.0}
+
+
+def research_summary(frame, stat, line, side, last5=None):
+    """Return neutral, descriptive sentences for the selected historical sample."""
+    if frame.empty:
+        return []
+
+    vals = pd.to_numeric(frame[stat], errors="coerce").dropna()
+    if vals.empty:
+        return []
+
+    wins = int(frame["grade"].eq("Win").sum())
+    losses = int(frame["grade"].eq("Loss").sum())
+    pushes = int(frame["grade"].eq("Push").sum())
+    games = len(frame)
+    median = float(vals.median())
+    average = float(vals.mean())
+
+    if median > line:
+        median_relation = "above"
+    elif median < line:
+        median_relation = "below"
+    else:
+        median_relation = "equal to"
+
+    sentences = [
+        f"{wins} wins in {games} games at this line ({hit_rate(frame):.0f}% graded hit rate; {wins}-{losses}-{pushes} W-L-P).",
+        f"Sample average: {average:.1f}; median: {median:.1f}, {median_relation} the {line:g} line.",
+    ]
+
+    if last5 is not None and not last5.empty:
+        recent = hit_rate(last5)
+        overall = hit_rate(frame)
+        diff = recent - overall
+        if abs(diff) < 10:
+            trend = "similar to"
+        elif diff > 0:
+            trend = "higher than"
+        else:
+            trend = "lower than"
+        sentences.append(
+            f"Last-5 graded hit rate is {recent:.0f}%, {trend} the selected sample's {overall:.0f}%."
+        )
+
+    return sentences

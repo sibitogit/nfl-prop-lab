@@ -1,26 +1,19 @@
-# NFL Prop Lab — Candidate v0.8
+# NFL Prop Lab — Candidate v0.9 Beta
 
-Correction build based on the first live Streamlit screenshots.
+This build adds the first synthesis layer after the live v0.8 validation.
 
-## Fixed
-- Market-specific default lines instead of a universal 50.5:
-  - Passing Yards 249.5
-  - Receptions 4.5
-  - Receiving Yards 54.5
-  - Passing TDs 1.5
-  - TD / INT markets 0.5
-  - etc.
-- Default line automatically resets when the market changes.
-- Sample selector says exactly which season exists: `Latest season (2025)` rather than misleading `Current season`.
-- 2026 not-yet-published data is shown as an informational notice rather than a technical warning.
-- Quick-read KPI cards no longer duplicate "Last 10".
-- W-L-P record moved out of narrow metric cards so `10-0-0` does not get visually clipped.
-- Line Explorer ranges now depend on market:
-  - Passing Yards: broader
-  - Receiving/Rushing Yards: medium
-  - Receptions: ±1/±2
-  - TD/INT: half/one-unit movements
-- No new commercial or predictive features added; this is deliberately a correction/UX build.
+## New
+- Neutral **Research summary** in Quick read.
+- Shows wins/games, graded hit rate, W-L-P, average, median vs line, and Last-5 comparison.
+- If an upcoming opponent is selected, the summary adds defense-vs-position rank and league-average context.
+- Explicitly avoids calling a prop a "bet", "pick", "value", or "+EV".
+- Added tests for summary logic, including push handling.
 
-## Deployment
-Replace the existing repo files with this build. Streamlit Community Cloud should redeploy automatically after the GitHub commit.
+## Still unchanged
+- Manual sportsbook line entry.
+- Historical/descriptive analysis only.
+- 2026 data loads automatically once the nflverse season file becomes available.
+- No paid API, hosting upgrade, or new cost.
+
+## Next checkpoint
+Before commercialization, manually validate representative QB/RB/WR/TE props and opponent context in the deployed app.
