@@ -9,11 +9,22 @@ from core import (
 )
 
 st.set_page_config(
-    page_title="NFL Prop Lab — Candidate v0.9.3 Beta",
+    page_title="NFL Prop Lab — Beta v1.0",
     page_icon="🏈",
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+
+st.markdown("""
+<style>
+.block-container {padding-top: 2.2rem; padding-bottom: 2rem;}
+[data-testid="stMetricValue"] {font-size: 2rem;}
+[data-testid="stSidebar"] hr {margin-top: 1.25rem; margin-bottom: 1.25rem;}
+div[data-testid="stAlert"] {border-radius: 0.65rem;}
+</style>
+""", unsafe_allow_html=True)
+
 
 PLAYER_URL = "https://github.com/nflverse/nflverse-data/releases/download/stats_player/stats_player_week_{season}.csv"
 SCHEDULE_URL = "https://raw.githubusercontent.com/nflverse/nfldata/master/data/games.csv"
@@ -197,7 +208,7 @@ def research_summary(frame, stat, line, side, last5=None):
 
 # ---------- DATA ----------
 st.title("🏈 NFL Prop Lab")
-st.caption("Candidate v0.9.3 Beta · historical prop research, not a betting recommendation")
+st.caption("Backtest NFL player props against historical performance.")
 
 try:
     with st.spinner("Loading NFL data…"):
@@ -306,7 +317,7 @@ primary = sample_map[scope]
 # Treat an unavailable future/current season differently from a real technical error.
 missing_seasons = sorted({s for s, _ in failures})
 if 2026 in missing_seasons and latest_loaded_season < 2026:
-    st.info("2026 regular-season player stats are not available in the dataset yet. Showing the latest available historical data.")
+    st.caption("Data status: 2026 regular-season player stats are not available yet; using the latest available historical season.")
 elif failures:
     with st.expander("Data availability notice"):
         st.write("Some historical season files could not be loaded. The app is using all seasons that are currently available.")
@@ -447,6 +458,19 @@ with tab3:
                  hide_index=True, use_container_width=True)
 
 st.divider()
+with st.expander("How to read NFL Prop Lab"):
+    st.markdown(
+        """
+        **Hit rate** grades the selected historical games against the line you entered. Pushes are excluded from the hit-rate denominator.
+
+        **Line Explorer** reruns that same sample at nearby lines so you can see how sensitive the historical result is to the number.
+
+        **Matchup context** aggregates the selected stat produced by all players at that position against a defense. It is context, not a projection.
+
+        **Research Summary** condenses the selected sample; it does not estimate sportsbook probability, expected value, or recommend a wager.
+        """
+    )
+
 st.caption(
     "NFL Prop Lab uses nflverse weekly player statistics and schedules. Historical results, hit rates and matchup "
     "allowances are descriptive and do not establish expected value or predict future outcomes. "
