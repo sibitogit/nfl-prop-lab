@@ -9,7 +9,7 @@ from core import (
 )
 
 st.set_page_config(
-    page_title="NFL Prop Lab — Candidate v0.9.2 Beta",
+    page_title="NFL Prop Lab — Candidate v0.9.3 Beta",
     page_icon="🏈",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -197,7 +197,7 @@ def research_summary(frame, stat, line, side, last5=None):
 
 # ---------- DATA ----------
 st.title("🏈 NFL Prop Lab")
-st.caption("Candidate v0.9.2 Beta · historical prop research, not a betting recommendation")
+st.caption("Candidate v0.9.3 Beta · historical prop research, not a betting recommendation")
 
 try:
     with st.spinner("Loading NFL data…"):
@@ -249,10 +249,13 @@ with st.sidebar:
     market = st.selectbox("Market", available_markets)
     side = st.segmented_control("Side", ["Over","Under"], default="Over")
 
-    # Reset the line only when the chosen market changes.
-    if st.session_state.get("_last_market") != market:
+    # Reset the starting line whenever the position/market context changes.
+    # This prevents Streamlit from briefly carrying a stale or zero value
+    # across players whose available prop menus differ.
+    line_context = f"{player_pos}|{market}"
+    if st.session_state.get("_line_context") != line_context:
         st.session_state["sportsbook_line"] = float(default_line(player_pos, market))
-        st.session_state["_last_market"] = market
+        st.session_state["_line_context"] = line_context
 
     line = st.number_input(
         "Sportsbook line",
@@ -262,6 +265,9 @@ with st.sidebar:
         help="Starting value is only a neutral example. Replace it with your sportsbook's actual line."
     )
 
+    # A true 0.0 line can be valid for some custom markets, but none of the
+    # current default configurations use it. Keep user-entered 0.0 untouched;
+    # context changes above will always initialize a proper default first.
     teams = sorted(data["team"].dropna().unique())
     matchup_defense = st.selectbox("Upcoming opponent", ["Not selected"] + teams)
 
