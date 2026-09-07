@@ -3,8 +3,13 @@ import streamlit as st
 import altair as alt
 from datetime import datetime, timezone
 
+from core import (
+    grade_prop, record, hit_rate, hit_text, split_table,
+    defense_vs_position, line_explorer, consistency_metrics,
+)
+
 st.set_page_config(
-    page_title="NFL Prop Lab — Candidate v0.7",
+    page_title="NFL Prop Lab — Candidate v0.8",
     page_icon="🏈",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -38,8 +43,23 @@ POSITION_MARKETS = {
     "TE": ["Receptions","Receiving Yards","Targets","Receiving TDs"],
 }
 
+# Neutral starting points only. The user always replaces these with the sportsbook line.
+DEFAULT_LINES = {
+    "Passing Yards": 249.5,
+    "Pass Completions": 21.5,
+    "Pass Attempts": 32.5,
+    "Passing TDs": 1.5,
+    "Interceptions Thrown": 0.5,
+    "Rushing Yards": 49.5,
+    "Rush Attempts": 13.5,
+    "Rushing TDs": 0.5,
+    "Receptions": 4.5,
+    "Receiving Yards": 54.5,
+    "Targets": 6.5,
+    "Receiving TDs": 0.5,
+}
+
 SEASONS = [2022, 2023, 2024, 2025, 2026]
-MIN_SPLIT_GAMES = 3
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_player_season(season):
@@ -73,14 +93,39 @@ def add_home_away(player_df, games):
         return x.drop(columns=["away_team","home_team"])
     return player_df.assign(venue="Unknown", gameday=pd.NA)
 
-from core import (
-    grade_prop, record, hit_rate, hit_text, split_table,
-    defense_vs_position, line_explorer, consistency_metrics,
-)
+def explorer_offsets(market):
+    if market in {"Passing Yards"}:
+        return [-25, -10, 0, 10, 25]
+    if market in {"Receiving Yards", "Rushing Yards"}:
+        return [-10, -5, 0, 5, 10]
+    if market in {"Pass Attempts", "Pass Completions", "Rush Attempts", "Targets"}:
+        return [-4, -2, 0, 2, 4]
+    if market == "Receptions":
+        return [-2, -1, 0, 1, 2]
+    if market in {"Passing TDs", "Interceptions Thrown", "Rushing TDs", "Receiving TDs"}:
+        return [-1, -0.5, 0, 0.5, 1]
+    return [-10, -5, 0, 5, 10]
+
+def custom_line_explorer(df, stat, main_line, side, market):
+    rows = []
+    seen = set()
+    for off in explorer_offsets(market):
+        test_line = max(0.0, main_line + off)
+        if test_line in seen:
+            continue
+        seen.add(test_line)
+        g = grade_prop(df, stat, test_line, side)
+        rows.append({
+            "Line": float(test_line),
+            "Hit rate": round(hit_rate(g), 1),
+            "Record": record(g),
+            "Selected": "← sportsbook" if off == 0 else "",
+        })
+    return pd.DataFrame(rows)
 
 # ---------- DATA ----------
 st.title("🏈 NFL Prop Lab")
-st.caption("Candidate v0.7 · historical prop research, not a betting recommendation")
+st.caption("Candidate v0.8 · historical prop research, not a betting recommendation")
 
 try:
     with st.spinner("Loading NFL data…"):
@@ -101,8 +146,9 @@ if missing:
     st.stop()
 
 data = data[data["position"].isin(["QB","RB","WR","TE"])].copy()
+latest_loaded_season = int(data["season"].max())
 
-# ---------- SIDEBAR / INPUT ----------
+# ---------- SIDEBAR ----------
 with st.sidebar:
     st.header("Prop setup")
     st.caption("Enter the line exactly as shown by your sportsbook.")
@@ -114,7 +160,6 @@ with st.sidebar:
         .drop_duplicates("player_id", keep="last")
         .sort_values("player_display_name")
     )
-
     labels = players.apply(lambda r: f"{r['player_display_name']} — {r['position']}", axis=1).tolist()
     player_label = st.selectbox("Player", labels, index=None, placeholder="Search a player…")
 
@@ -132,22 +177,27 @@ with st.sidebar:
     market = st.selectbox("Market", available_markets)
     side = st.segmented_control("Side", ["Over","Under"], default="Over")
 
-    stat = MARKETS[market]
-    default_line = 0.5 if "TD" in market or "Interceptions" in market else 50.5
-    step = 0.5
-    line = st.number_input("Sportsbook line", min_value=0.0, value=float(default_line), step=step)
+    # Reset the line only when the chosen market changes.
+    if st.session_state.get("_last_market") != market:
+        st.session_state["sportsbook_line"] = float(DEFAULT_LINES[market])
+        st.session_state["_last_market"] = market
 
-    scope = st.selectbox("Sample", ["Current season","Last 5","Last 10","Last 20"], index=2)
+    line = st.number_input(
+        "Sportsbook line",
+        min_value=0.0,
+        step=0.5,
+        key="sportsbook_line",
+        help="Starting value is only a neutral example. Replace it with your sportsbook's actual line."
+    )
 
     teams = sorted(data["team"].dropna().unique())
     matchup_defense = st.selectbox("Upcoming opponent", ["Not selected"] + teams)
 
     st.divider()
     st.caption("W-L-P = Win · Loss · Push")
-    if failures:
-        st.warning("One or more season files are temporarily unavailable.")
 
 # ---------- PLAYER HISTORY ----------
+stat = MARKETS[market]
 hist = data[data["player_id"].eq(player_id)].copy()
 hist[stat] = pd.to_numeric(hist[stat], errors="coerce")
 hist = hist.dropna(subset=[stat]).sort_values(["season","week"])
@@ -158,38 +208,47 @@ if hist.empty:
     st.info("No usable games exist for this player/market.")
     st.stop()
 
-latest_data_season = int(data["season"].max())
 player_latest_season = int(hist["season"].max())
 season_hist = hist[hist["season"].eq(player_latest_season)].copy()
-
 last5, last10, last20 = hist.tail(5), hist.tail(10), hist.tail(20)
+
+# Sample control is now honest about which season is actually available.
+sample_options = [f"Latest season ({player_latest_season})", "Last 5", "Last 10", "Last 20"]
+with st.sidebar:
+    scope = st.selectbox("Sample", sample_options, index=2)
+
 sample_map = {
-    "Current season": season_hist,
+    f"Latest season ({player_latest_season})": season_hist,
     "Last 5": last5,
     "Last 10": last10,
     "Last 20": last20,
 }
 primary = sample_map[scope]
 
+# Treat an unavailable future/current season differently from a real technical error.
+missing_seasons = sorted({s for s, _ in failures})
+if 2026 in missing_seasons and latest_loaded_season < 2026:
+    st.info("2026 regular-season player stats are not available in the dataset yet. Showing the latest available historical data.")
+elif failures:
+    with st.expander("Data availability notice"):
+        st.write("Some historical season files could not be loaded. The app is using all seasons that are currently available.")
+
 st.subheader(f"{player_name} · {side} {line:g} {market}")
-st.caption(f"{player_pos} · latest player season in dataset: {player_latest_season}")
+st.caption(f"{player_pos} · latest available player season: {player_latest_season}")
 
-if player_latest_season < latest_data_season:
-    st.warning(
-        f"This player has no {latest_data_season} regular-season stat row in the current dataset. "
-        f"The 'Current season' sample therefore refers to {player_latest_season}."
-    )
-
-# ---------- QUICK READ ----------
+# ---------- TABS ----------
 tab1, tab2, tab3 = st.tabs(["Quick read", "Matchup & splits", "Game log"])
 
 with tab1:
-    a,b,c,d,e = st.columns(5)
-    a.metric(scope, hit_text(primary))
-    b.metric("Last 5", hit_text(last5))
-    c.metric("Last 10", hit_text(last10))
-    d.metric("Average", f"{primary[stat].mean():.1f}")
-    e.metric("Median", f"{primary[stat].median():.1f}")
+    # Avoid duplicated labels and clipped W-L-P strings inside metric cards.
+    a,b,c,d = st.columns(4)
+    a.metric(f"{scope} hit rate", f"{hit_rate(primary):.0f}%")
+    b.metric("Last 5 hit rate", f"{hit_rate(last5):.0f}%")
+    c.metric("Average", f"{primary[stat].mean():.1f}")
+    d.metric("Median", f"{primary[stat].median():.1f}")
+    st.caption(
+        f"{scope}: {record(primary)} W-L-P · Last 5: {record(last5)} · Last 10: {record(last10)}"
+    )
 
     if len(primary) < 5:
         st.warning("Very small sample. Do not treat this hit rate as stable.")
@@ -198,7 +257,7 @@ with tab1:
 
     st.markdown("#### Line explorer")
     st.caption("How sensitive is the historical result to a nearby sportsbook line?")
-    explore = line_explorer(primary, stat, line, side)
+    explore = custom_line_explorer(primary, stat, line, side, market)
     st.dataframe(
         explore,
         hide_index=True,
@@ -223,7 +282,6 @@ with tab1:
     chart_df = primary[["season","week","opponent_team","venue",stat,"grade"]].copy()
     chart_df["Game"] = chart_df["season"].astype(str) + " W" + chart_df["week"].astype(int).astype(str)
     chart_df = chart_df.rename(columns={stat:"Result","opponent_team":"Opponent","venue":"Venue","grade":"Grade"})
-
     base = alt.Chart(chart_df).encode(
         x=alt.X("Game:N", sort=None, title="Game"),
         tooltip=["Game:N","Opponent:N","Venue:N","Grade:N",alt.Tooltip("Result:Q", format=".1f")]
@@ -237,7 +295,6 @@ with tab2:
     if matchup_defense == "Not selected":
         st.info("Select the upcoming opponent in the sidebar to see defensive context.")
     else:
-        # Defensive context uses the player's latest available season.
         def_ctx = defense_vs_position(data, player_latest_season, player_pos, stat)
         if def_ctx.empty or matchup_defense not in set(def_ctx["opponent_team"]):
             st.info(f"No {player_latest_season} defensive context is available for {matchup_defense}.")
@@ -247,14 +304,11 @@ with tab2:
             delta = row["Allowed_per_game"] - league_avg
             rank = int(row["Most_allowed_rank"])
             total = len(def_ctx)
-
             x1,x2,x3,x4 = st.columns(4)
-            x1.metric(f"Allowed to {player_pos}s / game", f"{row['Allowed_per_game']:.1f}",
-                      f"{delta:+.1f} vs avg")
+            x1.metric(f"Allowed to {player_pos}s / game", f"{row['Allowed_per_game']:.1f}", f"{delta:+.1f} vs avg")
             x2.metric("Most-allowed rank", f"{rank}/{total}")
             x3.metric("Last 5 allowed / game", f"{row['L5_Allowed_per_game']:.1f}")
             x4.metric("League average", f"{league_avg:.1f}")
-
             st.caption(
                 f"This sums {market.lower()} produced by all {player_pos}s facing {matchup_defense} "
                 "in each game. It is matchup context, not a player projection."
@@ -273,11 +327,8 @@ with tab2:
     with s2:
         opponents = split_table(primary, "opponent_team", stat)
         st.markdown("**Opponent**")
-        st.dataframe(
-            opponents.sort_values(["Games","Hit rate"], ascending=False),
-            hide_index=True,
-            use_container_width=True
-        )
+        st.dataframe(opponents.sort_values(["Games","Hit rate"], ascending=False),
+                     hide_index=True, use_container_width=True)
         st.caption("Opponent rows with fewer than 3 games are marked Small.")
 
 with tab3:
@@ -287,16 +338,13 @@ with tab3:
         "season":"Season","week":"Week","gameday":"Date","team":"Team",
         "opponent_team":"Opponent","venue":"Venue",stat:market,"grade":"Grade"
     })
-    st.dataframe(
-        view.sort_values(["Season","Week"], ascending=False),
-        hide_index=True,
-        use_container_width=True
-    )
+    st.dataframe(view.sort_values(["Season","Week"], ascending=False),
+                 hide_index=True, use_container_width=True)
 
 st.divider()
 st.caption(
-    "NFL Prop Lab uses nflverse weekly player statistics and schedules. "
-    "Historical results, hit rates and matchup allowances are descriptive and do not establish expected value "
-    "or predict future outcomes. Sportsbook lines are entered manually."
+    "NFL Prop Lab uses nflverse weekly player statistics and schedules. Historical results, hit rates and matchup "
+    "allowances are descriptive and do not establish expected value or predict future outcomes. "
+    "Sportsbook lines are entered manually."
 )
 st.caption(f"Session data loaded: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
