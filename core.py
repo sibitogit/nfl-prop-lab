@@ -47,13 +47,40 @@ def defense_vs_position(data, season, position, stat):
     x=data[data["season"].eq(season)&data["position"].eq(position)&data[stat].notna()].copy()
     if x.empty:
         return pd.DataFrame()
-    keys=["season","week","opponent_team"]
-    if "game_id" in x.columns:
-        keys.append("game_id")
-    game_allowed=x.groupby(keys,as_index=False)[stat].sum().rename(columns={stat:"allowed"})
-    season_allowed=game_allowed.groupby("opponent_team",as_index=False).agg(Games=("allowed","size"),Allowed_per_game=("allowed","mean"),Median_allowed=("allowed","median"))
-    season_allowed["Most_allowed_rank"]=season_allowed["Allowed_per_game"].rank(method="min",ascending=False).astype(int)
-    last5=(game_allowed.sort_values(["opponent_team","week"]).groupby("opponent_team",group_keys=False).tail(5).groupby("opponent_team",as_index=False).agg(L5_Games=("allowed","size"),L5_Allowed_per_game=("allowed","mean")))
+
+    # game_id is the safest game-level key when available. Fall back to season/week.
+    if "game_id" in x.columns and x["game_id"].notna().any():
+        keys=["opponent_team","game_id"]
+    else:
+        keys=["opponent_team","season","week"]
+
+    game_allowed=(
+        x.groupby(keys, as_index=False, dropna=False)
+         .agg(allowed=(stat, "sum"))
+    )
+    season_allowed=game_allowed.groupby("opponent_team",as_index=False).agg(
+        Games=("allowed","size"),
+        Allowed_per_game=("allowed","mean"),
+        Median_allowed=("allowed","median")
+    )
+    season_allowed["Most_allowed_rank"]=season_allowed["Allowed_per_game"].rank(
+        method="min",ascending=False
+    ).astype(int)
+
+    # Preserve chronological ordering where week exists; otherwise game_id is stable enough for tests.
+    sort_cols=["opponent_team"]
+    if "week" in game_allowed.columns:
+        sort_cols.append("week")
+    elif "game_id" in game_allowed.columns:
+        sort_cols.append("game_id")
+
+    last5=(
+        game_allowed.sort_values(sort_cols)
+        .groupby("opponent_team",group_keys=False)
+        .tail(5)
+        .groupby("opponent_team",as_index=False)
+        .agg(L5_Games=("allowed","size"),L5_Allowed_per_game=("allowed","mean"))
+    )
     return season_allowed.merge(last5,on="opponent_team",how="left")
 
 def line_explorer(df, stat, main_line, side):

@@ -1,19 +1,24 @@
-# NFL Prop Lab — Candidate v0.9 Beta
+# NFL Prop Lab — Candidate v0.9.2 Beta
 
-This build adds the first synthesis layer after the live v0.8 validation.
+Validation/polish build after the first successful Research Summary deployment.
 
-## New
-- Neutral **Research summary** in Quick read.
-- Shows wins/games, graded hit rate, W-L-P, average, median vs line, and Last-5 comparison.
-- If an upcoming opponent is selected, the summary adds defense-vs-position rank and league-average context.
-- Explicitly avoids calling a prop a "bet", "pick", "value", or "+EV".
-- Added tests for summary logic, including push handling.
+## Improvements
+- Position-aware default rushing lines (QB/RB/WR no longer share the same starting point).
+- Sample-quality label and explicit game count.
+- Research Summary says "historical hits" instead of ambiguous "wins".
+- TD/INT Line Explorer keeps nearby lines at sportsbook-style half increments.
+- Added a validation matrix covering representative QB/RB/WR/TE props, Over/Under, pushes, consistency metrics, and defense-vs-position aggregation.
 
-## Still unchanged
-- Manual sportsbook line entry.
-- Historical/descriptive analysis only.
-- 2026 data loads automatically once the nflverse season file becomes available.
-- No paid API, hosting upgrade, or new cost.
+## Validation
+Automated test suite is expected to cover:
+- Over and Under grading
+- Push exclusion from hit-rate denominator
+- QB passing yards
+- RB rushing yards
+- WR receptions
+- TE receiving yards
+- Consistency percentiles
+- Defense-vs-position aggregation/ranking
+- Research Summary logic
 
-## Next checkpoint
-Before commercialization, manually validate representative QB/RB/WR/TE props and opponent context in the deployed app.
+No paid dependency or service was added.

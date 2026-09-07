@@ -9,7 +9,7 @@ from core import (
 )
 
 st.set_page_config(
-    page_title="NFL Prop Lab — Candidate v0.9.1 Beta Hotfix",
+    page_title="NFL Prop Lab — Candidate v0.9.2 Beta",
     page_icon="🏈",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -50,14 +50,24 @@ DEFAULT_LINES = {
     "Pass Attempts": 32.5,
     "Passing TDs": 1.5,
     "Interceptions Thrown": 0.5,
-    "Rushing Yards": 49.5,
-    "Rush Attempts": 13.5,
     "Rushing TDs": 0.5,
     "Receptions": 4.5,
     "Receiving Yards": 54.5,
     "Targets": 6.5,
     "Receiving TDs": 0.5,
 }
+
+POSITION_DEFAULT_LINES = {
+    ("QB", "Rushing Yards"): 24.5,
+    ("QB", "Rush Attempts"): 4.5,
+    ("RB", "Rushing Yards"): 59.5,
+    ("RB", "Rush Attempts"): 13.5,
+    ("WR", "Rushing Yards"): 4.5,
+    ("WR", "Rush Attempts"): 0.5,
+}
+
+def default_line(position, market):
+    return POSITION_DEFAULT_LINES.get((position, market), DEFAULT_LINES.get(market, 0.5))
 
 SEASONS = [2022, 2023, 2024, 2025, 2026]
 
@@ -109,8 +119,14 @@ def explorer_offsets(market):
 def custom_line_explorer(df, stat, main_line, side, market):
     rows = []
     seen = set()
+    td_int_markets = {
+        "Passing TDs", "Interceptions Thrown", "Rushing TDs", "Receiving TDs"
+    }
     for off in explorer_offsets(market):
         test_line = max(0.0, main_line + off)
+        if market in td_int_markets:
+            # Nearby alternate lines are most useful at sportsbook-style half increments.
+            test_line = round(test_line * 2) / 2
         if test_line in seen:
             continue
         seen.add(test_line)
@@ -119,9 +135,20 @@ def custom_line_explorer(df, stat, main_line, side, market):
             "Line": float(test_line),
             "Hit rate": round(hit_rate(g), 1),
             "Record": record(g),
-            "Selected": "← sportsbook" if off == 0 else "",
+            "Selected": "← sportsbook" if abs(test_line - main_line) < 1e-9 else "",
         })
     return pd.DataFrame(rows)
+
+
+def sample_quality(frame):
+    n = len(frame)
+    if n >= 15:
+        return "Strong historical sample", "At least 15 games are included in the selected sample."
+    if n >= 10:
+        return "Usable historical sample", "10–14 games are included; splits may still be noisy."
+    if n >= 5:
+        return "Limited historical sample", "5–9 games are included; interpret percentages cautiously."
+    return "Very small historical sample", "Fewer than 5 games are included; percentages are highly unstable."
 
 
 def research_summary(frame, stat, line, side, last5=None):
@@ -148,7 +175,7 @@ def research_summary(frame, stat, line, side, last5=None):
         median_relation = "equal to"
 
     sentences = [
-        f"{wins} wins in {games} games at this line ({hit_rate(frame):.0f}% graded hit rate; {wins}-{losses}-{pushes} W-L-P).",
+        f"{wins} historical hits in {games} games at this line ({hit_rate(frame):.0f}% graded hit rate; {wins}-{losses}-{pushes} W-L-P).",
         f"Sample average: {average:.1f}; median: {median:.1f}, {median_relation} the {line:g} line.",
     ]
 
@@ -170,7 +197,7 @@ def research_summary(frame, stat, line, side, last5=None):
 
 # ---------- DATA ----------
 st.title("🏈 NFL Prop Lab")
-st.caption("Candidate v0.9.1 Beta Hotfix · historical prop research, not a betting recommendation")
+st.caption("Candidate v0.9.2 Beta · historical prop research, not a betting recommendation")
 
 try:
     with st.spinner("Loading NFL data…"):
@@ -224,7 +251,7 @@ with st.sidebar:
 
     # Reset the line only when the chosen market changes.
     if st.session_state.get("_last_market") != market:
-        st.session_state["sportsbook_line"] = float(DEFAULT_LINES[market])
+        st.session_state["sportsbook_line"] = float(default_line(player_pos, market))
         st.session_state["_last_market"] = market
 
     line = st.number_input(
@@ -294,6 +321,9 @@ with tab1:
     st.caption(
         f"{scope}: {record(primary)} W-L-P · Last 5: {record(last5)} · Last 10: {record(last10)}"
     )
+
+    quality_title, quality_text = sample_quality(primary)
+    st.caption(f"Sample quality: **{quality_title}** · {len(primary)} games · {quality_text}")
 
     st.markdown("#### Research summary")
     summary_lines = research_summary(primary, stat, line, side, last5=last5)
