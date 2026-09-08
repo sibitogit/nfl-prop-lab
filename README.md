@@ -1,25 +1,25 @@
-# NFL Prop Lab — Beta v1.0
+# NFL Prop Lab FREE v1.0
 
-First internally validated beta.
+NFL Prop Lab FREE is a quick historical backtester for NFL player props.
 
-## What it does
-Enter an NFL player prop line and backtest it against historical weekly performance.
+## FREE includes
+- Manual player, market, sportsbook line and Over/Under selection
+- Last-5 historical hit rate and W-L-P record
+- Last-5 average and median
+- Last-5 chart against the entered line
+- Last-5 game log
+- Neutral historical summary
 
-## Beta v1.0
-- QB/RB/WR/TE position-aware markets and starting lines
-- Over / Under / Push grading
-- Last 5 / Last 10 / Last 20 / latest-season samples
-- Line Explorer
-- Average, median and consistency percentiles
+## PRO adds
+- Latest season, L10 and L20 windows
+- Multi-sample comparison
+- Line Explorer and alternate-line matrix
+- Season-by-season history
 - Home/Away and opponent splits
-- Defense-vs-position matchup context
-- Neutral Research Summary
-- Sample-quality messaging
-- Methodology explainer
-- 2026 season data will load when available from nflverse
+- Defense vs Position context
+- Percentiles and consistency metrics
+- CSV export
 
-## Validation
-13 automated tests cover representative QB/RB/WR/TE markets, Over/Under grading,
-push handling, hit-rate denominator, percentiles, and defense-vs-position aggregation.
+Historical/descriptive research only. NFL Prop Lab does not estimate sportsbook probability, expected value, or recommend wagers.
 
-Historical/descriptive research only. No expected-value model or betting recommendation.
+Data source: nflverse weekly player statistics and schedules.

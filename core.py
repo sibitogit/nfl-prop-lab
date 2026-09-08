@@ -143,3 +143,71 @@ def research_summary(frame, stat, line, side, last5=None):
         )
 
     return sentences
+
+
+def sample_snapshot(frame, stat, label):
+    """Compact descriptive metrics for one historical sample."""
+    vals = pd.to_numeric(frame[stat], errors="coerce").dropna() if not frame.empty else pd.Series(dtype=float)
+    cons = consistency_metrics(frame, stat) if not frame.empty else {}
+    return {
+        "Sample": label,
+        "Games": int(len(frame)),
+        "Hit rate": round(hit_rate(frame), 1),
+        "Record": record(frame),
+        "Average": round(float(vals.mean()), 1) if not vals.empty else None,
+        "Median": round(float(vals.median()), 1) if not vals.empty else None,
+        "P25": round(cons.get("P25"), 1) if cons else None,
+        "P75": round(cons.get("P75"), 1) if cons else None,
+    }
+
+
+def sample_comparison(hist, stat, latest_season):
+    """Compare the same graded prop across common historical sample windows."""
+    if hist.empty:
+        return pd.DataFrame()
+    frames = [
+        (f"Latest season ({latest_season})", hist[hist["season"].eq(latest_season)].copy()),
+        ("Last 5", hist.tail(5).copy()),
+        ("Last 10", hist.tail(10).copy()),
+        ("Last 20", hist.tail(20).copy()),
+        ("All loaded games", hist.copy()),
+    ]
+    return pd.DataFrame([sample_snapshot(frame, stat, label) for label, frame in frames])
+
+
+def line_sample_matrix(hist, stat, lines, side, latest_season):
+    """Historical hit rates at several lines across multiple sample windows."""
+    if hist.empty:
+        return pd.DataFrame()
+    raw = hist.drop(columns=["grade"], errors="ignore").copy()
+    windows = {
+        f"Season {latest_season}": raw[raw["season"].eq(latest_season)],
+        "L5": raw.tail(5),
+        "L10": raw.tail(10),
+        "L20": raw.tail(20),
+    }
+    rows = []
+    for line in sorted(set(float(x) for x in lines)):
+        row = {"Line": line}
+        for label, frame in windows.items():
+            row[label] = round(hit_rate(grade_prop(frame, stat, line, side)), 1)
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def season_breakdown(hist, stat):
+    """Season-by-season descriptive performance for the already graded prop."""
+    if hist.empty:
+        return pd.DataFrame()
+    rows = []
+    for season, frame in hist.groupby("season", sort=False):
+        vals = pd.to_numeric(frame[stat], errors="coerce").dropna()
+        rows.append({
+            "Season": int(season),
+            "Games": int(len(frame)),
+            "Hit rate": round(hit_rate(frame), 1),
+            "Record": record(frame),
+            "Average": round(float(vals.mean()), 1) if not vals.empty else None,
+            "Median": round(float(vals.median()), 1) if not vals.empty else None,
+        })
+    return pd.DataFrame(rows).sort_values("Season", ascending=False)

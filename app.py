@@ -5,11 +5,11 @@ from datetime import datetime, timezone
 
 from core import (
     grade_prop, record, hit_rate, hit_text, split_table,
-    defense_vs_position, line_explorer, consistency_metrics,
+    defense_vs_position, line_explorer, consistency_metrics, sample_comparison, line_sample_matrix, season_breakdown,
 )
 
 st.set_page_config(
-    page_title="NFL Prop Lab — Beta v1.0",
+    page_title="NFL Prop Lab FREE — v1.0",
     page_icon="🏈",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -207,8 +207,9 @@ def research_summary(frame, stat, line, side, last5=None):
     return sentences
 
 # ---------- DATA ----------
-st.title("🏈 NFL Prop Lab")
-st.caption("Backtest NFL player props against historical performance.")
+st.title("🏈 NFL Prop Lab FREE")
+st.caption("Quick historical backtests for NFL player props.")
+st.caption("FREE v1.0 · descriptive research only")
 
 try:
     with st.spinner("Loading NFL data…"):
@@ -279,9 +280,6 @@ with st.sidebar:
     # A true 0.0 line can be valid for some custom markets, but none of the
     # current default configurations use it. Keep user-entered 0.0 untouched;
     # context changes above will always initialize a proper default first.
-    teams = sorted(data["team"].dropna().unique())
-    matchup_defense = st.selectbox("Upcoming opponent", ["Not selected"] + teams)
-
     st.divider()
     st.caption("W-L-P = Win · Loss · Push")
 
@@ -301,19 +299,6 @@ player_latest_season = int(hist["season"].max())
 season_hist = hist[hist["season"].eq(player_latest_season)].copy()
 last5, last10, last20 = hist.tail(5), hist.tail(10), hist.tail(20)
 
-# Sample control is now honest about which season is actually available.
-sample_options = [f"Latest season ({player_latest_season})", "Last 5", "Last 10", "Last 20"]
-with st.sidebar:
-    scope = st.selectbox("Sample", sample_options, index=2)
-
-sample_map = {
-    f"Latest season ({player_latest_season})": season_hist,
-    "Last 5": last5,
-    "Last 10": last10,
-    "Last 20": last20,
-}
-primary = sample_map[scope]
-
 # Treat an unavailable future/current season differently from a real technical error.
 missing_seasons = sorted({s for s, _ in failures})
 if 2026 in missing_seasons and latest_loaded_season < 2026:
@@ -325,77 +310,41 @@ elif failures:
 st.subheader(f"{player_name} · {side} {line:g} {market}")
 st.caption(f"{player_pos} · latest available player season: {player_latest_season}")
 
-# ---------- TABS ----------
-tab1, tab2, tab3 = st.tabs(["Quick read", "Matchup & splits", "Game log"])
+
+# ---------- FREE EXPERIENCE ----------
+# FREE is intentionally useful but bounded: it answers "how has this prop performed recently?"
+# PRO is reserved for deeper windows, alternate-line analysis, matchup context, splits and exports.
+free_sample = last5.copy()
+
+st.subheader(f"{player_name} · {side} {line:g} {market}")
+st.caption(f"{player_pos} · FREE v1.0 · latest available player season: {player_latest_season}")
+
+tab1, tab2 = st.tabs(["Quick backtest", "Game log"])
 
 with tab1:
-    # Avoid duplicated labels and clipped W-L-P strings inside metric cards.
     a,b,c,d = st.columns(4)
-    a.metric(f"{scope} hit rate", f"{hit_rate(primary):.0f}%")
-    b.metric("Last 5 hit rate", f"{hit_rate(last5):.0f}%")
-    c.metric("Average", f"{primary[stat].mean():.1f}")
-    d.metric("Median", f"{primary[stat].median():.1f}")
-    st.caption(
-        f"{scope}: {record(primary)} W-L-P · Last 5: {record(last5)} · Last 10: {record(last10)}"
-    )
+    a.metric("Last 5 hit rate", f"{hit_rate(free_sample):.0f}%")
+    b.metric("Record", record(free_sample))
+    c.metric("Average", f"{free_sample[stat].mean():.1f}")
+    d.metric("Median", f"{free_sample[stat].median():.1f}")
 
-    quality_title, quality_text = sample_quality(primary)
-    st.caption(f"Sample quality: **{quality_title}** · {len(primary)} games · {quality_text}")
+    quality_title, quality_text = sample_quality(free_sample)
+    st.caption(f"Sample quality: **{quality_title}** · {len(free_sample)} games · {quality_text}")
 
-    st.markdown("#### Research summary")
-    summary_lines = research_summary(primary, stat, line, side, last5=last5)
-    for sentence in summary_lines:
+    st.markdown("#### Recent historical summary")
+    summary_lines = research_summary(free_sample, stat, line, side, last5=free_sample)
+    # Keep FREE concise: only the two core descriptive facts.
+    for sentence in summary_lines[:2]:
         st.markdown(f"- {sentence}")
-
-    if matchup_defense != "Not selected":
-        summary_ctx = defense_vs_position(data, player_latest_season, player_pos, stat)
-        if not summary_ctx.empty and matchup_defense in set(summary_ctx["opponent_team"]):
-            summary_row = summary_ctx.loc[summary_ctx["opponent_team"].eq(matchup_defense)].iloc[0]
-            summary_total = len(summary_ctx)
-            summary_rank = int(summary_row["Most_allowed_rank"])
-            summary_league = float(summary_ctx["Allowed_per_game"].mean())
-            summary_allowed = float(summary_row["Allowed_per_game"])
-            relation = "above" if summary_allowed > summary_league else "below" if summary_allowed < summary_league else "at"
-            st.markdown(
-                f"- **Matchup context:** {matchup_defense} ranks {summary_rank}/{summary_total} "
-                f"for most {market.lower()} allowed to {player_pos}s per game "
-                f"({summary_allowed:.1f}, {relation} the {summary_league:.1f} league average)."
-            )
 
     st.caption(
         "Descriptive historical context only. It does not estimate win probability, expected value, or recommend a wager."
     )
 
-    if len(primary) < 5:
+    if len(free_sample) < 5:
         st.warning("Very small sample. Do not treat this hit rate as stable.")
-    elif len(primary) < 10:
-        st.info("Limited sample. Use it as context, not as a forecast.")
 
-    st.markdown("#### Line explorer")
-    st.caption("How sensitive is the historical result to a nearby sportsbook line?")
-    explore = custom_line_explorer(primary, stat, line, side, market)
-    st.dataframe(
-        explore,
-        hide_index=True,
-        use_container_width=True,
-        column_config={
-            "Line": st.column_config.NumberColumn(format="%.1f"),
-            "Hit rate": st.column_config.NumberColumn(format="%.1f%%"),
-        }
-    )
-
-    cons = consistency_metrics(primary, stat)
-    if cons:
-        p1,p2,p3 = st.columns(3)
-        p1.metric("25th percentile", f"{cons['P25']:.1f}")
-        p2.metric("Median", f"{cons['P50']:.1f}")
-        p3.metric("75th percentile", f"{cons['P75']:.1f}")
-        st.caption(
-            f"Observed range {cons['Min']:.1f}–{cons['Max']:.1f} · "
-            f"standard deviation {cons['Std']:.1f}"
-        )
-
-    chart_df = primary[["season","week","opponent_team","venue",stat,"grade"]].copy()
+    chart_df = free_sample[["season","week","opponent_team","venue",stat,"grade"]].copy()
     chart_df["Game"] = chart_df["season"].astype(str) + " W" + chart_df["week"].astype(int).astype(str)
     chart_df = chart_df.rename(columns={stat:"Result","opponent_team":"Opponent","venue":"Venue","grade":"Grade"})
     base = alt.Chart(chart_df).encode(
@@ -406,74 +355,44 @@ with tab1:
     rule = alt.Chart(pd.DataFrame({"line":[line]})).mark_rule(strokeDash=[6,4]).encode(y="line:Q")
     st.altair_chart((bars + rule).properties(height=330), use_container_width=True)
 
+    st.markdown("#### Go deeper with PRO")
+    st.caption(
+        "FREE is built for a quick recent backtest. PRO unlocks the research tools that answer what happens "
+        "when you widen the sample, move the line, split the games or add matchup context."
+    )
+    p1,p2,p3 = st.columns(3)
+    p1.markdown("**More history 🔒**\n\nSeason · L10 · L20 · season-by-season")
+    p2.markdown("**Line research 🔒**\n\nLine Explorer · alternate-line matrix · percentiles")
+    p3.markdown("**Context 🔒**\n\nHome/Away · opponent splits · Defense vs Position")
+    st.caption("PRO also includes the multi-sample Research Desk and CSV export.")
+
 with tab2:
-    st.markdown("#### Upcoming defensive matchup")
-    if matchup_defense == "Not selected":
-        st.info("Select the upcoming opponent in the sidebar to see defensive context.")
-    else:
-        def_ctx = defense_vs_position(data, player_latest_season, player_pos, stat)
-        if def_ctx.empty or matchup_defense not in set(def_ctx["opponent_team"]):
-            st.info(f"No {player_latest_season} defensive context is available for {matchup_defense}.")
-        else:
-            row = def_ctx.loc[def_ctx["opponent_team"].eq(matchup_defense)].iloc[0]
-            league_avg = def_ctx["Allowed_per_game"].mean()
-            delta = row["Allowed_per_game"] - league_avg
-            rank = int(row["Most_allowed_rank"])
-            total = len(def_ctx)
-            x1,x2,x3,x4 = st.columns(4)
-            x1.metric(f"Allowed to {player_pos}s / game", f"{row['Allowed_per_game']:.1f}", f"{delta:+.1f} vs avg")
-            x2.metric("Most-allowed rank", f"{rank}/{total}")
-            x3.metric("Last 5 allowed / game", f"{row['L5_Allowed_per_game']:.1f}")
-            x4.metric("League average", f"{league_avg:.1f}")
-            st.caption(
-                f"This sums {market.lower()} produced by all {player_pos}s facing {matchup_defense} "
-                "in each game. It is matchup context, not a player projection."
-            )
-
-    st.markdown("#### Historical splits")
-    s1,s2 = st.columns(2)
-    with s1:
-        venue_df = primary[primary["venue"].isin(["Home","Away"])]
-        venue = split_table(venue_df, "venue", stat)
-        st.markdown("**Home / Away**")
-        if venue.empty:
-            st.caption("No venue data available.")
-        else:
-            st.dataframe(venue, hide_index=True, use_container_width=True)
-    with s2:
-        opponents = split_table(primary, "opponent_team", stat)
-        st.markdown("**Opponent**")
-        st.dataframe(opponents.sort_values(["Games","Hit rate"], ascending=False),
-                     hide_index=True, use_container_width=True)
-        st.caption("Opponent rows with fewer than 3 games are marked Small.")
-
-with tab3:
     cols = ["season","week","gameday","team","opponent_team","venue",stat,"grade"]
-    view = hist[[c for c in cols if c in hist.columns]].copy()
+    view = free_sample[[c for c in cols if c in free_sample.columns]].copy()
     view = view.rename(columns={
         "season":"Season","week":"Week","gameday":"Date","team":"Team",
         "opponent_team":"Opponent","venue":"Venue",stat:market,"grade":"Grade"
     })
     st.dataframe(view.sort_values(["Season","Week"], ascending=False),
                  hide_index=True, use_container_width=True)
+    st.caption("FREE game log shows the same Last-5 sample used by the quick backtest.")
 
 st.divider()
-with st.expander("How to read NFL Prop Lab"):
+with st.expander("How to read NFL Prop Lab FREE"):
     st.markdown(
         """
-        **Hit rate** grades the selected historical games against the line you entered. Pushes are excluded from the hit-rate denominator.
+        **Hit rate** grades the player's last five available regular-season games against the line you entered. Pushes are excluded from the hit-rate denominator.
 
-        **Line Explorer** reruns that same sample at nearby lines so you can see how sensitive the historical result is to the number.
+        **Average and median** summarize only those same five games.
 
-        **Matchup context** aggregates the selected stat produced by all players at that position against a defense. It is context, not a projection.
+        **Game log** lets you inspect each result behind the summary.
 
-        **Research Summary** condenses the selected sample; it does not estimate sportsbook probability, expected value, or recommend a wager.
+        NFL Prop Lab FREE is deliberately a recent-sample backtester. PRO adds larger samples, alternate-line analysis, historical splits, matchup context and export tools.
         """
     )
 
 st.caption(
-    "NFL Prop Lab uses nflverse weekly player statistics and schedules. Historical results, hit rates and matchup "
-    "allowances are descriptive and do not establish expected value or predict future outcomes. "
-    "Sportsbook lines are entered manually."
+    "NFL Prop Lab uses nflverse weekly player statistics and schedules. Historical results and hit rates are "
+    "descriptive and do not establish expected value or predict future outcomes. Sportsbook lines are entered manually."
 )
 st.caption(f"Session data loaded: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
