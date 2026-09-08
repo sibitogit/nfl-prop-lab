@@ -9,7 +9,7 @@ from core import (
 )
 
 st.set_page_config(
-    page_title="NFL Prop Lab FREE — v1.0",
+    page_title="NFL Prop Lab FREE — v1.0.1",
     page_icon="🏈",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -209,7 +209,7 @@ def research_summary(frame, stat, line, side, last5=None):
 # ---------- DATA ----------
 st.title("🏈 NFL Prop Lab FREE")
 st.caption("Quick historical backtests for NFL player props.")
-st.caption("FREE v1.0 · descriptive research only")
+st.caption("FREE v1.0.1 · descriptive research only")
 
 try:
     with st.spinner("Loading NFL data…"):
@@ -307,17 +307,13 @@ elif failures:
     with st.expander("Data availability notice"):
         st.write("Some historical season files could not be loaded. The app is using all seasons that are currently available.")
 
-st.subheader(f"{player_name} · {side} {line:g} {market}")
-st.caption(f"{player_pos} · latest available player season: {player_latest_season}")
-
-
 # ---------- FREE EXPERIENCE ----------
 # FREE is intentionally useful but bounded: it answers "how has this prop performed recently?"
 # PRO is reserved for deeper windows, alternate-line analysis, matchup context, splits and exports.
 free_sample = last5.copy()
 
 st.subheader(f"{player_name} · {side} {line:g} {market}")
-st.caption(f"{player_pos} · FREE v1.0 · latest available player season: {player_latest_season}")
+st.caption(f"{player_pos} · FREE v1.0.1 · latest available player season: {player_latest_season}")
 
 tab1, tab2 = st.tabs(["Quick backtest", "Game log"])
 
